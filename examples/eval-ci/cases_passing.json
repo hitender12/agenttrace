@@ -1,0 +1,1 @@
+{"cases":[{"expect":{"max_cost_usd":0.05,"max_latency_ms":5000,"output_contains":"refund","task_success":true,"tool_sequence":["get_order","send_email"]},"input":{"query":"I want a refund for order ORD-1001"},"name":"refund flow"}]}

@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agenttrace"
+version = "0.1.0"
+description = "Record, replay, test, and debug AI-agent runs across frameworks"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+keywords = ["ai-agents", "tracing", "replay", "testing", "observability"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Testing",
+]
+# Standard library only (including sqlite3): no runtime dependencies,
+# no model API key, no network calls.
+dependencies = []
+
+[project.scripts]
+agenttrace = "agenttrace.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["agenttrace*"]

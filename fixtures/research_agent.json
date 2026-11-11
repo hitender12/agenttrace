@@ -1,0 +1,392 @@
+{
+  "agenttrace_version": 1,
+  "run": {
+    "id": "run_30528eeb7aeff1e3",
+    "name": "fixture-research-agent",
+    "mode": "record",
+    "replay_of": null,
+    "status": "completed",
+    "started_at": "2026-11-11T10:08:36.990070+00:00",
+    "ended_at": "2026-11-11T10:08:36.991892+00:00",
+    "metadata": {
+      "topics": [
+        "refund policy",
+        "shipping times"
+      ],
+      "fixture": "research_agent"
+    }
+  },
+  "events": [
+    {
+      "id": "evt_0001_c812542d",
+      "run_id": "run_30528eeb7aeff1e3",
+      "seq": 1,
+      "trace_id": "94f18cc9c1e77b8ca40438df49aff7f4",
+      "span_id": "30e3d3059c6ddd99",
+      "parent_span_id": null,
+      "type": "policy_decision",
+      "name": "research_scope",
+      "started_at": "2026-11-11T10:08:36.990172+00:00",
+      "ended_at": "2026-11-11T10:08:36.990175+00:00",
+      "duration_ms": null,
+      "status": "ok",
+      "input": {
+        "topics": [
+          "refund policy",
+          "shipping times"
+        ]
+      },
+      "output": {
+        "allowed": true,
+        "reason": "public docs only"
+      },
+      "meta": {}
+    },
+    {
+      "id": "evt_0002_c327c131",
+      "run_id": "run_30528eeb7aeff1e3",
+      "seq": 2,
+      "trace_id": "94f18cc9c1e77b8ca40438df49aff7f4",
+      "span_id": "6c1ba8ec6ded397c",
+      "parent_span_id": null,
+      "type": "retrieval",
+      "name": "retrieve",
+      "started_at": "2026-11-11T10:08:36.990363+00:00",
+      "ended_at": "2026-11-11T10:08:36.990366+00:00",
+      "duration_ms": null,
+      "status": "ok",
+      "input": {
+        "query": "refund policy"
+      },
+      "output": {
+        "documents": [
+          {
+            "id": "doc-refund-policy",
+            "title": "Refund policy",
+            "text": "Refunds are approved within 5 business days for orders under $100."
+          },
+          {
+            "id": "doc-order-lookup",
+            "title": "Order lookup",
+            "text": "Look up an order by its ID to confirm status and total before refunding."
+          }
+        ]
+      },
+      "meta": {}
+    },
+    {
+      "id": "evt_0003_d38aebf9",
+      "run_id": "run_30528eeb7aeff1e3",
+      "seq": 3,
+      "trace_id": "94f18cc9c1e77b8ca40438df49aff7f4",
+      "span_id": "b839277a6a0c81f1",
+      "parent_span_id": null,
+      "type": "tool_call",
+      "name": "search_kb",
+      "started_at": "2026-11-11T10:08:36.990493+00:00",
+      "ended_at": "2026-11-11T10:08:36.990495+00:00",
+      "duration_ms": null,
+      "status": "ok",
+      "input": {
+        "args": {
+          "query": "refund policy"
+        },
+        "side_effect": false
+      },
+      "output": {},
+      "meta": {}
+    },
+    {
+      "id": "evt_0004_625949d2",
+      "run_id": "run_30528eeb7aeff1e3",
+      "seq": 4,
+      "trace_id": "94f18cc9c1e77b8ca40438df49aff7f4",
+      "span_id": "ee72f2ab53a5367e",
+      "parent_span_id": null,
+      "type": "tool_result",
+      "name": "search_kb",
+      "started_at": "2026-11-11T10:08:36.990592+00:00",
+      "ended_at": "2026-11-11T10:08:36.990595+00:00",
+      "duration_ms": 0.09896800111164339,
+      "status": "ok",
+      "input": {},
+      "output": {
+        "result": {
+          "results": [
+            {
+              "id": "doc-refund-policy",
+              "title": "Refund policy",
+              "text": "Refunds are approved within 5 business days for orders under $100."
+            },
+            {
+              "id": "doc-order-lookup",
+              "title": "Order lookup",
+              "text": "Look up an order by its ID to confirm status and total before refunding."
+            }
+          ]
+        }
+      },
+      "meta": {}
+    },
+    {
+      "id": "evt_0005_01c6cd49",
+      "run_id": "run_30528eeb7aeff1e3",
+      "seq": 5,
+      "trace_id": "94f18cc9c1e77b8ca40438df49aff7f4",
+      "span_id": "87d08f27e055a036",
+      "parent_span_id": null,
+      "type": "browser_action",
+      "name": "open",
+      "started_at": "2026-11-11T10:08:36.990721+00:00",
+      "ended_at": "2026-11-11T10:08:36.990724+00:00",
+      "duration_ms": null,
+      "status": "ok",
+      "input": {
+        "action": "open",
+        "url": "https://docs.example.com/refund-policy"
+      },
+      "output": {
+        "title": "Fixture page",
+        "status": 200,
+        "url": "https://docs.example.com/refund-policy"
+      },
+      "meta": {}
+    },
+    {
+      "id": "evt_0006_af619672",
+      "run_id": "run_30528eeb7aeff1e3",
+      "seq": 6,
+      "trace_id": "94f18cc9c1e77b8ca40438df49aff7f4",
+      "span_id": "5dc9cd8878167741",
+      "parent_span_id": null,
+      "type": "memory_write",
+      "name": "memory_write",
+      "started_at": "2026-11-11T10:08:36.990830+00:00",
+      "ended_at": "2026-11-11T10:08:36.990832+00:00",
+      "duration_ms": null,
+      "status": "ok",
+      "input": {
+        "key": "research:refund policy"
+      },
+      "output": {
+        "value": [
+          "doc-refund-policy",
+          "doc-order-lookup"
+        ]
+      },
+      "meta": {}
+    },
+    {
+      "id": "evt_0007_0cb666ee",
+      "run_id": "run_30528eeb7aeff1e3",
+      "seq": 7,
+      "trace_id": "94f18cc9c1e77b8ca40438df49aff7f4",
+      "span_id": "a709980d99256743",
+      "parent_span_id": null,
+      "type": "retrieval",
+      "name": "retrieve",
+      "started_at": "2026-11-11T10:08:36.990923+00:00",
+      "ended_at": "2026-11-11T10:08:36.990925+00:00",
+      "duration_ms": null,
+      "status": "ok",
+      "input": {
+        "query": "shipping times"
+      },
+      "output": {
+        "documents": [
+          {
+            "id": "doc-shipping",
+            "title": "Shipping status",
+            "text": "Standard shipping delivers in 3-5 business days with tracking."
+          }
+        ]
+      },
+      "meta": {}
+    },
+    {
+      "id": "evt_0008_05ea5c8d",
+      "run_id": "run_30528eeb7aeff1e3",
+      "seq": 8,
+      "trace_id": "94f18cc9c1e77b8ca40438df49aff7f4",
+      "span_id": "ffd9ff070aa52007",
+      "parent_span_id": null,
+      "type": "tool_call",
+      "name": "search_kb",
+      "started_at": "2026-11-11T10:08:36.991024+00:00",
+      "ended_at": "2026-11-11T10:08:36.991026+00:00",
+      "duration_ms": null,
+      "status": "ok",
+      "input": {
+        "args": {
+          "query": "shipping times"
+        },
+        "side_effect": false
+      },
+      "output": {},
+      "meta": {}
+    },
+    {
+      "id": "evt_0009_e04174f9",
+      "run_id": "run_30528eeb7aeff1e3",
+      "seq": 9,
+      "trace_id": "94f18cc9c1e77b8ca40438df49aff7f4",
+      "span_id": "0c2a743055e20222",
+      "parent_span_id": null,
+      "type": "tool_result",
+      "name": "search_kb",
+      "started_at": "2026-11-11T10:08:36.991132+00:00",
+      "ended_at": "2026-11-11T10:08:36.991134+00:00",
+      "duration_ms": 0.10737100092228502,
+      "status": "ok",
+      "input": {},
+      "output": {
+        "result": {
+          "results": [
+            {
+              "id": "doc-shipping",
+              "title": "Shipping status",
+              "text": "Standard shipping delivers in 3-5 business days with tracking."
+            }
+          ]
+        }
+      },
+      "meta": {}
+    },
+    {
+      "id": "evt_0010_82cd79c1",
+      "run_id": "run_30528eeb7aeff1e3",
+      "seq": 10,
+      "trace_id": "94f18cc9c1e77b8ca40438df49aff7f4",
+      "span_id": "b070e40eae4c50f7",
+      "parent_span_id": null,
+      "type": "browser_action",
+      "name": "open",
+      "started_at": "2026-11-11T10:08:36.991257+00:00",
+      "ended_at": "2026-11-11T10:08:36.991260+00:00",
+      "duration_ms": null,
+      "status": "ok",
+      "input": {
+        "action": "open",
+        "url": "https://docs.example.com/shipping-times"
+      },
+      "output": {
+        "title": "Fixture page",
+        "status": 200,
+        "url": "https://docs.example.com/shipping-times"
+      },
+      "meta": {}
+    },
+    {
+      "id": "evt_0011_967b2b65",
+      "run_id": "run_30528eeb7aeff1e3",
+      "seq": 11,
+      "trace_id": "94f18cc9c1e77b8ca40438df49aff7f4",
+      "span_id": "7067abdeae560d32",
+      "parent_span_id": null,
+      "type": "memory_write",
+      "name": "memory_write",
+      "started_at": "2026-11-11T10:08:36.991356+00:00",
+      "ended_at": "2026-11-11T10:08:36.991358+00:00",
+      "duration_ms": null,
+      "status": "ok",
+      "input": {
+        "key": "research:shipping times"
+      },
+      "output": {
+        "value": [
+          "doc-shipping"
+        ]
+      },
+      "meta": {}
+    },
+    {
+      "id": "evt_0012_bef7a9cb",
+      "run_id": "run_30528eeb7aeff1e3",
+      "seq": 12,
+      "trace_id": "94f18cc9c1e77b8ca40438df49aff7f4",
+      "span_id": "9fb433139e29d546",
+      "parent_span_id": null,
+      "type": "model_request",
+      "name": "model_request",
+      "started_at": "2026-11-11T10:08:36.991457+00:00",
+      "ended_at": "2026-11-11T10:08:36.991460+00:00",
+      "duration_ms": null,
+      "status": "ok",
+      "input": {
+        "prompt": "You are a research agent. Synthesize these findings into a short summary:\n- refund policy: Refund policy\n- refund policy: Order lookup\n- shipping times: Shipping status",
+        "model": "scripted-1",
+        "headers": {}
+      },
+      "output": {},
+      "meta": {}
+    },
+    {
+      "id": "evt_0013_8af02036",
+      "run_id": "run_30528eeb7aeff1e3",
+      "seq": 13,
+      "trace_id": "94f18cc9c1e77b8ca40438df49aff7f4",
+      "span_id": "8ac8f4ce65b45204",
+      "parent_span_id": "9fb433139e29d546",
+      "type": "model_response",
+      "name": "model_response",
+      "started_at": "2026-11-11T10:08:36.991572+00:00",
+      "ended_at": "2026-11-11T10:08:36.991575+00:00",
+      "duration_ms": 0.11516199992911424,
+      "status": "ok",
+      "input": {},
+      "output": {
+        "text": "Your refund of $49.00 for order ORD-1001 has been approved. It will reach your original payment method within 5 business days."
+      },
+      "meta": {
+        "model": "scripted-1",
+        "tokens_in": 27,
+        "tokens_out": 21,
+        "cost_usd": 9.6e-05
+      }
+    },
+    {
+      "id": "evt_0014_86add6a5",
+      "run_id": "run_30528eeb7aeff1e3",
+      "seq": 14,
+      "trace_id": "94f18cc9c1e77b8ca40438df49aff7f4",
+      "span_id": "98ff3dc777531ecc",
+      "parent_span_id": null,
+      "type": "memory_write",
+      "name": "memory_write",
+      "started_at": "2026-11-11T10:08:36.991701+00:00",
+      "ended_at": "2026-11-11T10:08:36.991703+00:00",
+      "duration_ms": null,
+      "status": "ok",
+      "input": {
+        "key": "research_findings"
+      },
+      "output": {
+        "value": [
+          "refund policy: Refund policy",
+          "refund policy: Order lookup",
+          "shipping times: Shipping status"
+        ]
+      },
+      "meta": {}
+    },
+    {
+      "id": "evt_0015_f61b35bd",
+      "run_id": "run_30528eeb7aeff1e3",
+      "seq": 15,
+      "trace_id": "94f18cc9c1e77b8ca40438df49aff7f4",
+      "span_id": "b915e4708868c681",
+      "parent_span_id": null,
+      "type": "final_output",
+      "name": "final_output",
+      "started_at": "2026-11-11T10:08:36.991802+00:00",
+      "ended_at": "2026-11-11T10:08:36.991804+00:00",
+      "duration_ms": null,
+      "status": "ok",
+      "input": {},
+      "output": {
+        "text": "Your refund of $49.00 for order ORD-1001 has been approved. It will reach your original payment method within 5 business days."
+      },
+      "meta": {}
+    }
+  ]
+}

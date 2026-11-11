@@ -1,0 +1,105 @@
+{
+  "agenttrace_version": 1,
+  "run": {
+    "id": "run_d6850c5ca0fbea07",
+    "name": "fixture-support-retrieval-miss",
+    "mode": "record",
+    "replay_of": null,
+    "status": "completed",
+    "started_at": "2026-11-11T10:08:36.989194+00:00",
+    "ended_at": "2026-11-11T10:08:36.989961+00:00",
+    "metadata": {
+      "query": "What is the warranty period for the Widget Pro?",
+      "fixture": "support_retrieval_miss"
+    }
+  },
+  "events": [
+    {
+      "id": "evt_0001_e5ac6f3e",
+      "run_id": "run_d6850c5ca0fbea07",
+      "seq": 1,
+      "trace_id": "27ff7e6db7750a14c6cb47e37bb9a88f",
+      "span_id": "794d56686a97dfc9",
+      "parent_span_id": null,
+      "type": "policy_decision",
+      "name": "pii_check",
+      "started_at": "2026-11-11T10:08:36.989375+00:00",
+      "ended_at": "2026-11-11T10:08:36.989380+00:00",
+      "duration_ms": null,
+      "status": "ok",
+      "input": {
+        "query": "What is the warranty period for the Widget Pro?"
+      },
+      "output": {
+        "allowed": true,
+        "reason": "no PII patterns detected"
+      },
+      "meta": {}
+    },
+    {
+      "id": "evt_0002_814fa631",
+      "run_id": "run_d6850c5ca0fbea07",
+      "seq": 2,
+      "trace_id": "27ff7e6db7750a14c6cb47e37bb9a88f",
+      "span_id": "971a6ed56e219091",
+      "parent_span_id": null,
+      "type": "retrieval",
+      "name": "retrieve",
+      "started_at": "2026-11-11T10:08:36.989580+00:00",
+      "ended_at": "2026-11-11T10:08:36.989583+00:00",
+      "duration_ms": null,
+      "status": "ok",
+      "input": {
+        "query": "What is the warranty period for the Widget Pro?"
+      },
+      "output": {
+        "documents": [
+          {
+            "id": "doc-faq",
+            "title": "General FAQ",
+            "text": "Contact support for refunds, shipping updates, and cancellations."
+          }
+        ]
+      },
+      "meta": {}
+    },
+    {
+      "id": "evt_0003_3e30763d",
+      "run_id": "run_d6850c5ca0fbea07",
+      "seq": 3,
+      "trace_id": "27ff7e6db7750a14c6cb47e37bb9a88f",
+      "span_id": "18de9902d40c3f2e",
+      "parent_span_id": null,
+      "type": "error",
+      "name": "retrieval_miss",
+      "started_at": "2026-11-11T10:08:36.989753+00:00",
+      "ended_at": "2026-11-11T10:08:36.989756+00:00",
+      "duration_ms": null,
+      "status": "error",
+      "input": {},
+      "output": {
+        "message": "no relevant documents found for query: What is the warranty period for the Widget Pro?"
+      },
+      "meta": {}
+    },
+    {
+      "id": "evt_0004_7ba3e11b",
+      "run_id": "run_d6850c5ca0fbea07",
+      "seq": 4,
+      "trace_id": "27ff7e6db7750a14c6cb47e37bb9a88f",
+      "span_id": "38f8fbb27e704a75",
+      "parent_span_id": null,
+      "type": "final_output",
+      "name": "final_output",
+      "started_at": "2026-11-11T10:08:36.989864+00:00",
+      "ended_at": "2026-11-11T10:08:36.989866+00:00",
+      "duration_ms": null,
+      "status": "ok",
+      "input": {},
+      "output": {
+        "text": "I couldn't find information about that in our knowledge base. I've flagged this for a human support agent, who will follow up with the warranty details for the Widget Pro."
+      },
+      "meta": {}
+    }
+  ]
+}
