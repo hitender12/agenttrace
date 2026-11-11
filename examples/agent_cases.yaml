@@ -1,0 +1,31 @@
+# Regression cases for the demo customer-support agent (YAML form).
+# Same cases as agent_cases.json. Run with:
+#   python3 -m agenttrace eval examples/agent_cases.yaml --ci
+cases:
+  - name: refund flow
+    input:
+      query: I want a refund for order ORD-1001
+    expect:
+      tool_sequence: [get_order, send_email]
+      output_contains: refund
+      task_success: true
+      max_latency_ms: 5000
+      max_cost_usd: 0.05
+  - name: shipping status
+    input:
+      query: Where is my delivery for order ORD-2002?
+    expect:
+      tool_sequence: [get_order]
+      output_contains: delivered
+      task_success: true
+      max_latency_ms: 5000
+      max_cost_usd: 0.05
+  - name: cancellation
+    input:
+      query: Please cancel order ORD-1001
+    expect:
+      tool_sequence: [get_order]
+      output_contains: cancellation
+      task_success: true
+      max_latency_ms: 5000
+      max_cost_usd: 0.05

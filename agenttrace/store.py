@@ -33,6 +33,18 @@ class Store:
         self._conn.row_factory = sqlite3.Row
         self._init_schema()
 
+    @staticmethod
+    def resolve_base(path) -> Path:
+        """Resolve a ``--db`` argument to a store directory.
+
+        Accepts a directory (the store) or a path to the ``agenttrace.db``
+        file inside a store — the file's parent directory is used.
+        """
+        p = Path(path)
+        if p.suffix == ".db" or (p.is_file() and not p.is_dir()):
+            return p.parent
+        return p
+
     def _init_schema(self) -> None:
         self._conn.executescript(
             """
@@ -72,11 +84,14 @@ class Store:
     def create_run(self, name: str, mode: str = "record",
                    metadata: dict | None = None, replay_of: str | None = None) -> str:
         run_id = "run_" + secrets.token_hex(8)
+        # Run metadata is persisted too: redact it (and learn any secret
+        # it carries) before it reaches the database.
+        clean_metadata = self.redactor.redact(metadata or {})
         self._conn.execute(
             "INSERT INTO runs (id, name, mode, replay_of, status, started_at, metadata_json)"
             " VALUES (?, ?, ?, ?, 'running', ?, ?)",
             (run_id, name, mode, replay_of, now_iso(),
-             json.dumps(metadata or {})),
+             json.dumps(clean_metadata)),
         )
         self._conn.commit()
         return run_id

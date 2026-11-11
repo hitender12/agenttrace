@@ -133,24 +133,40 @@ data for one developer.
 ## Redaction (`agenttrace/redaction.py`)
 
 `Redactor` works recursively over dicts, lists, tuples, and strings.
-Two rule kinds:
+Three mechanisms:
 
-- **Key-based:** field names in `SENSITIVE_KEYS` (`api_key`,
-  `apikey`, `password`, `passwd`, `secret`, `client_secret`, `token`,
-  `access_token`, `refresh_token`, `authorization`, `bearer`,
-  `private_key`, case-insensitive) are replaced with `[REDACTED]`.
+- **Key-based (substring, case-insensitive):** any field whose name
+  contains `password`, `passwd`, `pwd`, `secret`, `token`, `api_key`,
+  `auth`, `bearer`, `credential`, `private`, `access_key` or
+  `session_key`/`session_token` has its value replaced with
+  `[REDACTED]` — whatever the exact spelling (`db_password`,
+  `auth_token`, `x-api-key`, `clientSecret` all match). The raw value
+  is also *learned* (see below).
 - **Pattern-based:** secret-shaped values in free text —
   `sk-...` keys, `ghp_...` GitHub tokens, `AKIA...` AWS keys,
-  `xox...` Slack tokens, `Bearer ...` headers — are replaced with
-  a labelled placeholder.
+  `xox...` Slack tokens, `Bearer ...` headers, JWTs, PEM private-key
+  blocks, long hex strings (>= 32 chars), and inline
+  `password=...` / `token: ...` assignments — are replaced with a
+  labelled placeholder.
+- **Secret learning:** a value first seen under a sensitive key, or
+  registered with `Redactor.register_secret()`, is scrubbed from all
+  free text in the same run — so the same secret in an error message,
+  a tool result, or a retrieval document is removed there too. The
+  model API key is registered automatically when a runtime is created
+  with one.
 
-Redaction runs twice: in `Store.add_event` before anything is written
-to SQLite or an artifact file, and again in `export_run` on the way
-out. Extend the rules with
+Redaction runs on write (`Store.add_event` and `Store.create_run` —
+run metadata is redacted too) and again in `export_run` on the way
+out, reusing the store's redactor so learned secrets carry over.
+Extend the rules with
 `Redactor(extra_keys=[...], extra_patterns=[(regex, replacement), ...])`
-and pass it to `Store(..., redactor=...)`. Redaction is best-effort:
-it cannot recognise credentials under unlisted keys or in formats it
-has no pattern for — see `SECURITY.md`.
+and pass it to `Store(..., redactor=...)`. Honest limit: an arbitrary
+string that never appeared under a sensitive key, was never
+registered, and matches no known shape cannot be distinguished from
+ordinary text by any redactor, and is not redacted — see `SECURITY.md`.
+The 10-probe suite in `tests/test_secrets_probes.py` covers keys,
+shapes, learning, metadata, nested JSON, error messages, tool results
+and artifact spills with 0 leaks.
 
 ## Replay (`agenttrace/replay.py`)
 
@@ -163,7 +179,11 @@ three modes and the side-effect gate, are in
 Every replay creates a new run row with `mode=replay:<mode>` and
 `replay_of=<source run id>`, and exposes a `report` dict (`mode`,
 `source_run_id`, `replayed_calls`, `live_calls`,
-`fallback_live_calls`, `blocked_side_effects`) that the CLI prints.
+`fallback_live_calls`, `blocked_side_effects`,
+`approved_side_effects`) that the CLI prints. An approved side
+effect is marked `meta.side_effect_approved: True` on its result
+event in every mode — including `exact`, where the recorded result
+is served under that approval.
 
 ## Diff (`agenttrace/diff.py`)
 
@@ -171,13 +191,17 @@ Every replay creates a new run row with `mode=replay:<mode>` and
 model prompts, tool sequence and arguments, retrieved document IDs,
 model metadata (model, tokens, cost), and final output text. It
 returns a structured list of changes plus a human-readable rendering
-via `render_diff`. Comparison is by call order, not by semantic
-alignment of steps — if the two runs take different paths, the diff
-reports the divergence as changes from the point they split.
+via `render_diff`. Diffing a run id that does not exist raises
+`ValueError` — a missing run is an error, not an empty run.
+Comparison is by call order, not by semantic alignment of steps — if
+the two runs take different paths, the diff reports the divergence as
+changes from the point they split.
 
 ## Eval / regression tests (`agenttrace/evals.py`)
 
-Cases are JSON files (`examples/agent_cases.json`): a list of
+Cases are JSON files (`examples/agent_cases.json`) or YAML files
+(`examples/agent_cases.yaml`, read by the small subset parser in
+`agenttrace/yamlmini.py`): a list of
 `{name, input: {query}, expect: {...}}`. Supported expectations:
 
 - `tool_sequence` — exact list of tool names called, in order
@@ -188,26 +212,39 @@ Cases are JSON files (`examples/agent_cases.json`): a list of
 - `max_latency_ms`, `max_cost_usd` — budgets for the whole case
 
 Each case runs the agent live in a fresh recording and is checked
-against its expectations. `eval_exit_code(report)` returns 1 when
+against its expectations — unless its input is `{run_id: ...}`, in
+which case the recorded run's events are checked directly and the
+agent is not re-run. `eval_exit_code(report)` returns 1 when
 anything fails — that is the CI contract; the CLI's `eval --ci`
-exits with that code.
+exits with that code. Bad case files raise `CaseFileError` with a
+plain message (the CLI prints `error: ...` and exits 2, never a
+traceback).
 
-## Export (`agenttrace/export.py`)
+## Export / import (`agenttrace/export.py`, `agenttrace/importer.py`)
 
 `export_run(store, run_id, out_path)` writes
 `{agenttrace_version: 1, run, events}` as indented JSON, redacted a
 second time. Fixtures are portable: they carry no database
 dependency, and `Event.from_dict` can read them back.
+`import_run(store, fixture_path)` reads a fixture back into a store,
+re-redacting on the way in; if the fixture's run id (or an event id)
+already exists, fresh ids are minted instead of colliding.
 
 ## CLI (`agenttrace/__main__.py`)
 
-`python -m agenttrace` exposes `record`, `replay`, `diff`, `eval`,
-`export`, `list`, and `timeline`. `record` runs the bundled demo
-agent (scripted, free, deterministic) — to instrument your own agent,
-use the SDK as shown in `examples/customer_support_agent.py`. All
-commands take `--db` (default `.agenttrace`). `replay` takes
-`--mode exact|live|hybrid`, `--hybrid-tools TOOL,...`, and
-`--allow-side-effects`.
+`python3 -m agenttrace` exposes `record`, `replay`, `diff`, `eval`,
+`export`, `import`, `list`, and `timeline` (after `pip install -e .`
+the `agenttrace` command works too). `record` runs the bundled demo
+agent (scripted, free, deterministic) — or, with `--` and a script
+path, runs that agent script as a subprocess (the script records
+itself with the SDK; see `examples/customer_support_agent.py`).
+All commands take `--db` (default `.agenttrace`), which accepts a
+store directory or the `agenttrace.db` file inside one. `replay`
+takes `--mode exact|live|hybrid`, `--hybrid-tools TOOL,...`, and
+`--allow-side-effects`. `timeline` takes `--payloads` to show each
+event's input/output. Read-only commands refuse a missing store
+instead of creating an empty one; bad input prints `error: ...`
+and exits 2.
 
 ## What is not here (production path)
 

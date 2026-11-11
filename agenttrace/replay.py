@@ -54,6 +54,7 @@ class ReplayRuntime(_Recorder):
             "live_calls": 0,
             "fallback_live_calls": 0,
             "blocked_side_effects": [],
+            "approved_side_effects": [],
         }
 
     def __enter__(self) -> "ReplayRuntime":
@@ -145,8 +146,16 @@ class ReplayRuntime(_Recorder):
             self.report["fallback_live_calls"] += 1
             return self._tool_live(name, args, is_side_effect)
         result = recorded.output.get("result", {})
+        # A side effect served from the recording under an explicit
+        # --allow-side-effects is still an approval: mark it auditable,
+        # exactly as the live path does. The flag is never silently inert.
+        approved = bool(is_side_effect and self.allow_side_effects)
         self._record(EventType.TOOL_RESULT.value, name, {},
-                     {"result": result}, meta={"replayed": True})
+                     {"result": result},
+                     meta={"replayed": True,
+                           **({"side_effect_approved": True} if approved else {})})
+        if approved:
+            self.report["approved_side_effects"].append(name)
         self.report["replayed_calls"] += 1
         return result
 
@@ -163,6 +172,8 @@ class ReplayRuntime(_Recorder):
             meta={"live": True,
                   **({"side_effect_approved": True} if side_effect else {})},
             duration_ms=(time.perf_counter() - started) * 1000)
+        if side_effect:
+            self.report["approved_side_effects"].append(name)
         self.report["live_calls"] += 1
         return result
 

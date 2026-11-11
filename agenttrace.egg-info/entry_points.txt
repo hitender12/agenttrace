@@ -1,0 +1,2 @@
+[console_scripts]
+agenttrace = agenttrace.__main__:main

@@ -150,6 +150,11 @@ class RecordRuntime(_Recorder):
         self.model_stub = model or ScriptedModel(api_key=api_key)
         self.api_key = api_key
         self.metadata = metadata or {}
+        # The model key is a secret the recorder itself knows: register it
+        # so it is scrubbed from free text anywhere in this run, not only
+        # from the Authorization header.
+        if api_key:
+            store.redactor.register_secret(api_key)
 
     def __enter__(self) -> "RecordRuntime":
         self.run_id = self.store.create_run(

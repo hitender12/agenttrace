@@ -28,6 +28,7 @@ The run is stored in ``examples/record-and-replay/.agenttrace/``
     python -m agenttrace list --db examples/record-and-replay/.agenttrace
 """
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -40,7 +41,10 @@ from agenttrace.events import EventType  # noqa: E402
 from agenttrace.runtime import extract_order_id  # noqa: E402
 
 QUERY = "I want a refund for order ORD-1001"
-DEFAULT_DB = Path(__file__).resolve().parent / ".agenttrace"
+# `agenttrace record -- python examples/record-and-replay/multi_tool_agent.py`
+# sets AGENTTRACE_DB; running the script directly uses its own .agenttrace/.
+DEFAULT_DB = Path(os.environ.get(
+    "AGENTTRACE_DB", Path(__file__).resolve().parent / ".agenttrace"))
 
 
 def multi_tool_agent(rt, query: str) -> str:

@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from .demo_agent import FAKE_API_KEY, customer_support_agent
 from .diff import diff_runs, render_diff
-from .evals import eval_exit_code, load_cases, run_eval
+from .evals import CaseFileError, eval_exit_code, load_cases, run_eval
 from .events import Event, EventType, new_span_id, new_trace_id
 from .export import export_run
+from .importer import import_run
 from .model_stub import ScriptedModel
 from .redaction import Redactor
 from .replay import ReplayRuntime
@@ -26,7 +27,7 @@ __all__ = [
     "RecordRuntime", "ReplayRuntime",
     "customer_support_agent", "FAKE_API_KEY",
     "diff_runs", "render_diff",
-    "load_cases", "run_eval", "eval_exit_code",
-    "export_run",
+    "load_cases", "run_eval", "eval_exit_code", "CaseFileError",
+    "export_run", "import_run",
     "__version__",
 ]

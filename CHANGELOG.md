@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Redaction leaks (QA audit).** Substring matching on field names
+  (`db_password`, `auth_token`, `x-api-key`, `clientSecret`, ...),
+  shape matching for JWTs, PEM keys, long hex strings and inline
+  `password=...` assignments, secret learning (a value first seen
+  under a sensitive key, or registered, is scrubbed from all free
+  text in the run), and redaction of run metadata. The 10-probe
+  audit suite plus harder nested/artifact probes now shows 0 leaks
+  (`tests/test_secrets_probes.py`). Honest limit documented: an
+  arbitrary string never seen under a sensitive key, never
+  registered, and matching no known shape cannot be distinguished
+  from ordinary text and is not redacted.
+- **README commands now run verbatim.** `record -- <script>` records
+  an agent script as a subprocess; `eval` accepts YAML case files
+  (small subset reader, `agenttrace/yamlmini.py`) and reports bad
+  files as plain `error: ...` (exit 2), never a traceback; run-id
+  examples use the real `run_<16 hex>` format; install instructions
+  added. Every Quickstart command is covered by
+  `tests/test_readme_commands.py`.
+- **Exact-mode approval marker.** `replay --mode exact
+  --allow-side-effects` now records `meta.side_effect_approved: True`
+  on the served result (and lists the tool in
+  `report["approved_side_effects"]`); the flag is never silently inert.
+- **Order-aware demo stub.** The scripted model answers about the
+  order id in the query instead of always answering about ORD-1001.
+- **`import` command added** (spec M5): imports exported fixtures,
+  re-redacts on the way in, and mints fresh run/event ids on collision.
+- **Diff of a missing run is an error** (`ValueError`), not a phantom
+  diff.
+- **`--db` accepts a file path** (`agenttrace.db`) as well as a store
+  directory. Read-only commands refuse a missing store instead of
+  creating an empty one as a side effect.
+- **`timeline --payloads`** shows each event's input/output.
+  `eval` can evaluate a recorded run (`input: {run_id: ...}`) without
+  re-running the agent live.
+
 ## [0.1.0] - 2026-11-11
 
 Initial release: a Python reference implementation of the AgentTrace

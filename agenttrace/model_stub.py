@@ -6,6 +6,10 @@ and cost, so recorded runs and exact replays are reproducible.
 """
 from __future__ import annotations
 
+import re
+
+_ORDER_RE = re.compile(r"ORD-\d+", re.IGNORECASE)
+
 
 class ScriptedModel:
     MODEL_NAME = "scripted-1"
@@ -18,24 +22,28 @@ class ScriptedModel:
     def complete(self, prompt: str, model: str | None = None) -> dict:
         self.calls += 1
         low = prompt.lower()
+        # Answer about the order the customer actually asked about, not a
+        # hardcoded one: the order id comes from the prompt itself.
+        match = _ORDER_RE.search(prompt)
+        order_id = match.group(0).upper() if match else "ORD-1001"
         if "refund" in low:
             text = (
-                "Your refund of $49.00 for order ORD-1001 has been approved. "
+                f"Your refund of $49.00 for order {order_id} has been approved. "
                 "It will reach your original payment method within 5 business days."
             )
         elif "shipping" in low or "delivery" in low:
             text = (
-                "Your order ORD-1001 was delivered on 2026-11-08 via standard shipping. "
+                f"Your order {order_id} was delivered on 2026-11-08 via standard shipping. "
                 "Tracking shows it was left at the front desk."
             )
         elif "cancel" in low:
             text = (
-                "Your order ORD-1001 can still be cancelled because it has not shipped yet. "
+                f"Your order {order_id} can still be cancelled because it has not shipped yet. "
                 "I have started the cancellation; you will get a confirmation email."
             )
         else:
             text = (
-                "Thanks for reaching out. I checked your order ORD-1001 and it is in good "
+                f"Thanks for reaching out. I checked your order {order_id} and it is in good "
                 "standing. Let me know if you need a refund, shipping update, or cancellation."
             )
         tokens_in = max(1, len(prompt.split()))

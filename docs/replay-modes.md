@@ -128,6 +128,13 @@ recorded run and in any export of it. Approval is per replay run,
 not a stored setting — every replay that allows side effects must ask
 again.
 
+The marker is recorded in **every** mode, including `exact`: when a
+recorded side-effect result is served under `--allow-side-effects`,
+the replayed `tool_result` still carries
+`meta.side_effect_approved: True` (and the tool name is added to
+`report["approved_side_effects"]`). The flag is never silently inert
+— if it is accepted, its approval is on the record.
+
 ### 3. Mark new side-effecting tools honestly
 
 When you add a tool (see `CONTRIBUTING.md`), set its entry in

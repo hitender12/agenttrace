@@ -18,6 +18,11 @@ def _by_type(events, event_type: str, name: str | None = None):
 
 
 def diff_runs(store: Store, run_a: str, run_b: str) -> dict:
+    # A missing run is an error, not an empty run: diffing against
+    # nothing would otherwise report phantom changes (or "no changes").
+    for run_id in (run_a, run_b):
+        if store.get_run(run_id) is None:
+            raise ValueError(f"no such run: {run_id}")
     events_a = store.get_events(run_a)
     events_b = store.get_events(run_b)
     changes: list[dict] = []

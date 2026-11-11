@@ -23,7 +23,10 @@ def export_run(store: Store, run_id: str, out_path,
         "run": run,
         "events": [event.to_dict() for event in events],
     }
-    payload = (redactor or Redactor()).redact(payload)
+    # Reuse the store's redactor when no explicit one is given, so secrets
+    # learned during recording are scrubbed from the export too.
+    redactor = redactor or getattr(store, "redactor", None) or Redactor()
+    payload = redactor.redact(payload)
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(payload, indent=2), encoding="utf-8")

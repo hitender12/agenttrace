@@ -10,6 +10,7 @@ prints the run id. Then inspect it::
     python -m agenttrace timeline <run_id>
     python -m agenttrace replay <run_id>
 """
+import os
 import sys
 from pathlib import Path
 
@@ -23,7 +24,10 @@ QUERY = "I want a refund for order ORD-1001"
 
 
 def main() -> None:
-    store = Store(".agenttrace")
+    # `agenttrace record -- python examples/customer_support_agent.py`
+    # sets AGENTTRACE_DB so the run lands in the --db store the user
+    # asked for; running the script directly defaults to .agenttrace/.
+    store = Store(os.environ.get("AGENTTRACE_DB", ".agenttrace"))
     try:
         model = ScriptedModel(api_key=FAKE_API_KEY)
         with RecordRuntime(store, "example-support-run", model=model,

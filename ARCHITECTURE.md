@@ -67,34 +67,52 @@ side effects.
 `policy_decision` (`side_effect_gate`, allowed=false) and returns
 `{"status": "blocked_on_replay"}` without invoking the tool. With
 `allow_side_effects=True` the stub executes, and the event is marked
-`side_effect_approved: True` so the approval is auditable.
+`side_effect_approved: True` so the approval is auditable — and the
+same marker is recorded in `exact` mode when a recorded side-effect
+result is served under that approval, so the flag is never silently
+inert.
 
 ### Diff (`diff.py`)
 
 Compares two runs event-by-event: model prompts, tool sequence and
 arguments, retrieved document IDs, model metadata (model, tokens, cost),
 and final output text. Returns a structured list of changes plus a
-human-readable rendering.
+human-readable rendering. Diffing a run id that does not exist raises
+`ValueError` — a missing run is an error, not an empty run.
 
 ### Regression tests (`evals.py`)
 
-Cases are JSON: `{name, input: {query}, expect: {...}}`. Expectations can
-cover `tool_sequence`, `output_contains`, `output_equals`, `task_success`,
-`max_latency_ms`, and `max_cost_usd`. Each case runs the agent live in a
-fresh recording and is checked against its expectations. `eval_exit_code`
-returns 1 when anything fails — that is the CI contract.
+Cases are JSON or YAML (a small subset reader in `yamlmini.py`):
+`{name, input: {query}, expect: {...}}`. Expectations can cover
+`tool_sequence`, `output_contains`, `output_equals`, `task_success`,
+`max_latency_ms`, and `max_cost_usd`. Each case runs the agent live in
+a fresh recording and is checked against its expectations — or, when
+its input is `{run_id: ...}`, the recorded run's events are checked
+directly and the agent is not re-run. `eval_exit_code` returns 1 when
+anything fails — that is the CI contract. Bad case files raise
+`CaseFileError` with a plain message instead of a traceback.
 
 ### Redaction (`redaction.py`)
 
-Two layers: key-based (field names like `api_key`, `password`, `token`,
-`authorization`) and pattern-based (e.g. `sk-...`, `ghp_...`, AWS access
-keys, `xox...` tokens, `Bearer ...` headers). Applied on write and again
-on export. Configurable via `extra_keys` / `extra_patterns`.
+Three mechanisms: substring matching on field names (any key
+containing `password`, `secret`, `token`, `api_key`, `auth`,
+`credential`, `private` and friends is redacted, whatever its exact
+spelling), shape matching in free text (`sk-...`, `ghp_...`, AWS keys,
+`xox...` tokens, `Bearer ...` headers, JWTs, PEM private keys, long
+hex strings, `password=...` assignments), and secret learning (a
+value first seen under a sensitive key, or registered with
+`register_secret()`, is scrubbed from all free text in the run).
+Applied on write (events and run metadata) and again on export.
+Honest limit: an arbitrary string that never appeared under a
+sensitive key, was never registered, and matches no known shape
+cannot be distinguished from ordinary text and is not redacted.
 
-### Export (`export.py`)
+### Export / import (`export.py`, `importer.py`)
 
-Writes `{agenttrace_version, run, events}` as indented JSON, redacted.
-Fixtures are portable: they carry no database dependency.
+Writes `{agenttrace_version, run, events}` as indented JSON,
+redacted. Fixtures are portable: they carry no database dependency.
+`import_run` reads a fixture back into a store, re-redacting on the
+way in and minting fresh run/event ids on collision.
 
 ## Production path (not implemented here)
 
