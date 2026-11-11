@@ -1,0 +1,228 @@
+"""Command-line interface for AgentTrace.
+
+Usage:
+    python -m agenttrace record [--name NAME] [--query QUERY] [--db PATH]
+    python -m agenttrace replay RUN_ID [--mode exact|live|hybrid]
+                       [--hybrid-tools TOOL,...] [--allow-side-effects]
+    python -m agenttrace diff RUN_A RUN_B
+    python -m agenttrace eval CASES.json [--ci] [--db PATH]
+    python -m agenttrace export RUN_ID --out FILE
+    python -m agenttrace list
+    python -m agenttrace timeline RUN_ID
+
+``record`` runs the bundled demo customer-support agent (scripted, free,
+deterministic). To instrument your own agent, use the SDK — see
+``examples/customer_support_agent.py``.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+
+from .demo_agent import FAKE_API_KEY, customer_support_agent
+from .diff import diff_runs, render_diff
+from .evals import eval_exit_code, load_cases, run_eval
+from .events import EventType
+from .export import export_run
+from .model_stub import ScriptedModel
+from .replay import ReplayRuntime
+from .runtime import RecordRuntime
+from .store import Store
+
+DEFAULT_QUERY = "I want a refund for order ORD-1001"
+
+
+def _store(db_path: str) -> Store:
+    return Store(db_path)
+
+
+def cmd_record(args) -> int:
+    store = _store(args.db)
+    try:
+        model = ScriptedModel(api_key=FAKE_API_KEY)
+        started = time.perf_counter()
+        with RecordRuntime(store, args.name, model=model,
+                           api_key=FAKE_API_KEY,
+                           metadata={"query": args.query}) as rt:
+            answer = customer_support_agent(rt, args.query)
+            run_id = rt.run_id
+        events = store.get_events(run_id)
+        cost = sum(e.meta.get("cost_usd", 0.0) for e in events
+                   if e.type == EventType.MODEL_RESPONSE.value)
+        print(f"recorded run {run_id}")
+        print(f"  events: {len(events)}  latency: {(time.perf_counter() - started) * 1000:.1f} ms"
+              f"  model cost: ${cost:.6f}")
+        print(f"  final output: {answer}")
+        return 0
+    finally:
+        store.close()
+
+
+def cmd_replay(args) -> int:
+    store = _store(args.db)
+    try:
+        source = store.get_run(args.run_id)
+        if source is None:
+            print(f"no such run: {args.run_id}", file=sys.stderr)
+            return 2
+        query = source["metadata"].get("query", DEFAULT_QUERY)
+        model = ScriptedModel(api_key=FAKE_API_KEY)
+        hybrid = [t.strip() for t in args.hybrid_tools.split(",") if t.strip()] \
+            if args.hybrid_tools else []
+        with ReplayRuntime(store, args.run_id, mode=args.mode,
+                           hybrid_tools=hybrid,
+                           allow_side_effects=args.allow_side_effects,
+                           model=model) as rt:
+            answer = customer_support_agent(rt, query)
+            new_run_id = rt.run_id
+            report = rt.report
+        print(f"replayed {args.run_id} in {args.mode} mode -> new run {new_run_id}")
+        print(f"  mode: {report['mode']}  replayed calls: {report['replayed_calls']}"
+              f"  live calls: {report['live_calls']}"
+              f"  fallback live calls: {report['fallback_live_calls']}")
+        print(f"  blocked side effects: {report['blocked_side_effects'] or 'none'}")
+        print(f"  model stub calls during replay: {model.calls}")
+        print(f"  final output: {answer}")
+        return 0
+    finally:
+        store.close()
+
+
+def cmd_diff(args) -> int:
+    store = _store(args.db)
+    try:
+        diff = diff_runs(store, args.run_a, args.run_b)
+        print(render_diff(diff))
+        return 0
+    finally:
+        store.close()
+
+
+def cmd_eval(args) -> int:
+    store = _store(args.db)
+    try:
+        cases = load_cases(args.cases)
+        report = run_eval(store, cases)
+        for result in report["results"]:
+            mark = "PASS" if result["ok"] else "FAIL"
+            print(f"[{mark}] {result['name']} "
+                  f"(latency {result['latency_ms']} ms, cost ${result['cost_usd']:.6f})")
+            for check in result["checks"]:
+                if not check["ok"]:
+                    print(f"       failed check {check['name']}: "
+                          f"expected {check['expected']!r}, got {check['actual']!r}")
+        print(f"{report['passed']} passed, {report['failed']} failed")
+        if args.ci:
+            code = eval_exit_code(report)
+            print(f"CI mode: exit {code}")
+            return code
+        return 0
+    finally:
+        store.close()
+
+
+def cmd_export(args) -> int:
+    store = _store(args.db)
+    try:
+        out = export_run(store, args.run_id, args.out)
+        print(f"exported {args.run_id} to {out}")
+        return 0
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    finally:
+        store.close()
+
+
+def cmd_list(args) -> int:
+    store = _store(args.db)
+    try:
+        runs = store.list_runs()
+        if not runs:
+            print("no runs recorded yet")
+            return 0
+        for run in runs:
+            print(f"{run['id']}  {run['name']:<28} {run['mode']:<14} "
+                  f"{run['status']:<10} {run['started_at']}")
+        return 0
+    finally:
+        store.close()
+
+
+def cmd_timeline(args) -> int:
+    store = _store(args.db)
+    try:
+        run = store.get_run(args.run_id)
+        if run is None:
+            print(f"no such run: {args.run_id}", file=sys.stderr)
+            return 2
+        print(f"run {run['id']} ({run['name']}, mode={run['mode']}, status={run['status']})")
+        for event in store.get_events(args.run_id):
+            dur = f" {event.duration_ms:.1f}ms" if event.duration_ms else ""
+            print(f"  {event.seq:>3} {event.type:<16} {event.name:<16}"
+                  f" {event.status}{dur}")
+        return 0
+    finally:
+        store.close()
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="agenttrace",
+        description="Record, replay, test, and debug AI-agent runs.")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("record", help="record a demo agent run")
+    p.add_argument("--name", default="demo")
+    p.add_argument("--query", default=DEFAULT_QUERY)
+    p.add_argument("--db", default=".agenttrace")
+    p.set_defaults(func=cmd_record)
+
+    p = sub.add_parser("replay", help="replay a recorded run")
+    p.add_argument("run_id")
+    p.add_argument("--mode", choices=["exact", "live", "hybrid"], default="exact")
+    p.add_argument("--hybrid-tools", default="")
+    p.add_argument("--allow-side-effects", action="store_true")
+    p.add_argument("--db", default=".agenttrace")
+    p.set_defaults(func=cmd_replay)
+
+    p = sub.add_parser("diff", help="diff two runs")
+    p.add_argument("run_a")
+    p.add_argument("run_b")
+    p.add_argument("--db", default=".agenttrace")
+    p.set_defaults(func=cmd_diff)
+
+    p = sub.add_parser("eval", help="run regression cases")
+    p.add_argument("cases")
+    p.add_argument("--ci", action="store_true")
+    p.add_argument("--db", default=".agenttrace")
+    p.set_defaults(func=cmd_eval)
+
+    p = sub.add_parser("export", help="export a run as a test fixture")
+    p.add_argument("run_id")
+    p.add_argument("--out", required=True)
+    p.add_argument("--db", default=".agenttrace")
+    p.set_defaults(func=cmd_export)
+
+    p = sub.add_parser("list", help="list recorded runs")
+    p.add_argument("--db", default=".agenttrace")
+    p.set_defaults(func=cmd_list)
+
+    p = sub.add_parser("timeline", help="show a run's event timeline")
+    p.add_argument("run_id")
+    p.add_argument("--db", default=".agenttrace")
+    p.set_defaults(func=cmd_timeline)
+
+    return parser
+
+
+def main(argv=None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
