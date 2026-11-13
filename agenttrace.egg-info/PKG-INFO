@@ -31,6 +31,11 @@ agenttrace diff run_9f2c1a7b4e8d03f5 run_1a2b3c4d5e6f7081
 agenttrace eval examples/agent_cases.yaml
 ```
 
+On PEP 668 systems (Debian/Ubuntu, where `pip install` refuses to
+touch the system environment) run it inside a virtualenv, or use
+`pip install -e . --break-system-packages`. The `python3 -m agenttrace`
+commands in the Quickstart below need no install at all.
+
 Run ids look like `run_` followed by 16 hex characters (for example
 `run_9f2c1a7b4e8d03f5`); `agenttrace list` shows the real ones. The
 commands above are the blueprint's killer workflow. In this reference
@@ -79,8 +84,10 @@ python3 -m agenttrace import fixtures/run.json
 `--db` accepts a store directory (default `.agenttrace/`) or the
 `agenttrace.db` file inside one, for example
 `--db .agenttrace/agenttrace.db`. Bad input (a missing case file, an
-unknown run id, a malformed fixture) prints a plain `error: ...`
-message and exits 2 — never a traceback.
+unknown run id, a malformed fixture, a corrupt store, an import
+fixture with missing or wrongly typed event fields, importing a
+directory) prints a plain `error: ...` message and exits 2 — never a
+traceback.
 
 Python 3.10+, standard library only (including `sqlite3`). No model API
 key, no network calls, no paid services.
@@ -111,27 +118,44 @@ key, no network calls, no paid services.
   model metadata, and output fields between two runs. Diffing a run id
   that does not exist is an error, not an empty diff.
 - **Redaction** — secrets are removed before persistence *and* again on
-  export, by three mechanisms: (1) substring matching on field names —
+  export, by five mechanisms: (1) substring matching on field names —
   any key containing `password`, `secret`, `token`, `api_key`, `auth`,
-  `credential`, `private` and friends is redacted, whatever its exact
-  spelling (`db_password`, `auth_token`, `x-api-key`, `clientSecret`);
-  (2) shape matching in free text (`sk-...`, `ghp_...`, AWS keys, Slack
-  tokens, `Bearer ...`, JWTs, PEM private keys, long hex strings,
-  `password=...` assignments); (3) secret learning — a value first seen
-  under a sensitive key, or registered with
-  `Redactor.register_secret()`, is scrubbed from all free text in the
-  run, so the same secret in an error message or tool result is removed
-  too. Run metadata is redacted as well. Honest limit: an arbitrary
-  string that never appeared under a sensitive key, was never
-  registered, and matches no known secret shape cannot be distinguished
-  from ordinary text by any redactor, and is not redacted — if your
-  agent handles a credential, pass it under a sensitive field name or
-  register it. (Tested by `tests/test_secrets_probes.py`: 10 probes
-  plus harder nested/artifact cases, 0 leaks.)
+  `credential`, `private`, `sessionid`, `db_pass`, `encryption_key`,
+  `signing_key`, `csrf`, or a bare `pass` key is redacted, whatever its
+  exact spelling (`db_password`, `auth_token`, `x-api-key`,
+  `clientSecret`) — with care that `bypass`/`compass`/`passage` are not
+  matched; (2) shape matching in free text (`sk-...`, `ghp_...`, AWS
+  keys, Slack tokens, `Bearer ...`, JWTs, PEM private keys, long hex
+  strings, `password=...` assignments, with trailing punctuation
+  stripped so `password=hunter2.` learns `hunter2`); (3) secret
+  learning — a value first seen under a sensitive key, or registered
+  with `Redactor.register_secret()`, is scrubbed from all free text in
+  the run, so the same secret in an error message or tool result is
+  removed too — and learning is retroactive: learned secrets are
+  persisted per run as SHA-256 digests + lengths (never the secret
+  itself), `finish_run` re-redacts earlier occurrences and artifact
+  files, and a fresh store re-redacts from the persisted set on
+  export, so the fix survives a restart; (4) run names and event
+  type/name are redacted at write time; (5) the `memory_write` key
+  trap is closed — when the `key` argument of `memory_write` is itself
+  a sensitive key name, the value is learned and redacted. Run metadata
+  is redacted as well. Generic values are not learned (`password`,
+  `secret`, `token`, ...), so "enter your password here" stays
+  readable. Honest limit: an arbitrary string that never appeared under
+  a sensitive key, was never registered, and matches no known secret
+  shape cannot be distinguished from ordinary text by any redactor,
+  and is not redacted — if your agent handles a credential, pass it
+  under a sensitive field name or register it. (Tested by
+  `tests/test_secrets_probes.py`: 10 probes plus harder nested/artifact
+  cases, and `tests/test_fixes_round2.py`: 20 round-2 regression tests,
+  both at 0 leaks.)
 - **Dataset export/import** — selected runs exported as portable JSON
   fixtures (`export`), and imported back into any store (`import`).
   Importing the same fixture twice mints fresh run/event ids instead
-  of colliding, and re-redacts everything on the way in.
+  of colliding, and re-redacts everything on the way in — import runs
+  the full redactor, learning the fixture's own secrets first, so a
+  hand-made fixture carrying an unlearned free-text secret or a
+  `db_pass`/`sessionid`-keyed one lands scrubbed.
 
 ## The demo that should make developers share it
 
@@ -150,10 +174,12 @@ python3 -m agenttrace eval examples/agent_cases.yaml --ci
 
 This is a **Python reference implementation** of the AgentTrace blueprint.
 What genuinely works: the full event model, SQLite + artifact recording,
-the three replay modes with side-effect gating and auditable approvals,
-diff, redaction (three mechanisms, tested against a 10-probe suite),
-dataset export/import, and the eval/CI runner for JSON and YAML cases
-and for recorded runs — all verified by the test suite below.
+the three replay modes with side-effect gating and auditable approvals
+(retrieval fallbacks are counted as live, not replayed), diff,
+redaction (five mechanisms, tested against a 10-probe suite plus 20
+round-2 regression tests, 0 leaks), dataset export/import, and the
+eval/CI runner for JSON and YAML cases and for recorded runs — all
+verified by the test suite below.
 
 What is **not** built here (and is stated as the production path in
 `ARCHITECTURE.md`): the Rust trace engine, OTLP ingestion/export, the
@@ -207,6 +233,7 @@ tests/
   test_fixtures.py        # fixture loading
   test_secrets_probes.py  # 10-probe redaction suite + harder probes (CI)
   test_fixes.py           # fix regressions: YAML eval, import, markers, CLI errors
+  test_fixes_round2.py    # round-2 redaction regressions (20 tests, CI)
   test_readme_commands.py # every command in this README runs verbatim
 .github/workflows/ci.yml # tests on Python 3.10/3.11/3.12
 pyproject.toml            # packaging (console script: agenttrace)

@@ -133,27 +133,46 @@ data for one developer.
 ## Redaction (`agenttrace/redaction.py`)
 
 `Redactor` works recursively over dicts, lists, tuples, and strings.
-Three mechanisms:
+Five mechanisms:
 
 - **Key-based (substring, case-insensitive):** any field whose name
   contains `password`, `passwd`, `pwd`, `secret`, `token`, `api_key`,
-  `auth`, `bearer`, `credential`, `private`, `access_key` or
-  `session_key`/`session_token` has its value replaced with
-  `[REDACTED]` — whatever the exact spelling (`db_password`,
+  `auth`, `bearer`, `credential`, `private`, `access_key`,
+  `sessionid`/`session_id`, `db_pass`/`dbpass`, `encryption_key`,
+  `signing_key`, `csrf`, or a bare `pass` key has its value replaced
+  with `[REDACTED]` — whatever the exact spelling (`db_password`,
   `auth_token`, `x-api-key`, `clientSecret` all match). The raw value
-  is also *learned* (see below).
+  is also *learned* (see below). `bypass`/`compass`/`passage` are
+  not matched: `pass` is only sensitive as a standalone key.
 - **Pattern-based:** secret-shaped values in free text —
   `sk-...` keys, `ghp_...` GitHub tokens, `AKIA...` AWS keys,
   `xox...` Slack tokens, `Bearer ...` headers, JWTs, PEM private-key
   blocks, long hex strings (>= 32 chars), and inline
   `password=...` / `token: ...` assignments — are replaced with a
-  labelled placeholder.
-- **Secret learning:** a value first seen under a sensitive key, or
-  registered with `Redactor.register_secret()`, is scrubbed from all
-  free text in the same run — so the same secret in an error message,
-  a tool result, or a retrieval document is removed there too. The
-  model API key is registered automatically when a runtime is created
-  with one.
+  labelled placeholder. Trailing punctuation is stripped from learned
+  assignment values, so `password=hunter2.` learns `hunter2` and the
+  period is preserved in the output.
+- **Secret learning (retroactive):** a value first seen under a
+  sensitive key, or registered with `Redactor.register_secret()`, is
+  scrubbed from all free text in the same run — so the same secret in
+  an error message, a tool result, or a retrieval document is removed
+  there too. Learning is retroactive: learned secrets are persisted
+  per run as SHA-256 digests + lengths (never the secret itself) in
+  the store's `learned_secrets` table, `finish_run` re-redacts earlier
+  occurrences and artifact files with the full learned set, and a
+  fresh store re-redacts from the persisted set on export — including
+  the crash case where the run never finished. The model API key is
+  registered automatically when a runtime is created with one.
+- **Name redaction:** run names and event type/name are redacted at
+  write time, so a shape-matching secret (e.g. a JWT) in a run name
+  never lands in the database.
+- **memory_write key trap:** when the `key` argument of
+  `memory_write` is itself a sensitive key name, the value is learned
+  and redacted — the sensitive name is not just a string under `key`.
+- **Generic values are not learned:** a small stoplist (`password`,
+  `secret`, `token`, `changeme`, `password123`, ...) prevents the
+  literal word "password" from being learned and then scrubbing
+  ordinary text like "enter your password here".
 
 Redaction runs on write (`Store.add_event` and `Store.create_run` —
 run metadata is redacted too) and again in `export_run` on the way
@@ -166,7 +185,10 @@ registered, and matches no known shape cannot be distinguished from
 ordinary text by any redactor, and is not redacted — see `SECURITY.md`.
 The 10-probe suite in `tests/test_secrets_probes.py` covers keys,
 shapes, learning, metadata, nested JSON, error messages, tool results
-and artifact spills with 0 leaks.
+and artifact spills with 0 leaks, and `tests/test_fixes_round2.py`
+adds 20 round-2 regression tests for the key spellings, retroactive
+learning, names, the `memory_write` trap, punctuation, import and
+over-redaction cases above, also at 0 leaks.
 
 ## Replay (`agenttrace/replay.py`)
 
@@ -218,7 +240,11 @@ agent is not re-run. `eval_exit_code(report)` returns 1 when
 anything fails — that is the CI contract; the CLI's `eval --ci`
 exits with that code. Bad case files raise `CaseFileError` with a
 plain message (the CLI prints `error: ...` and exits 2, never a
-traceback).
+traceback). The same error discipline applies across the CLI: a
+corrupt SQLite store, a JSON case file without a `cases` key, an
+over-nested YAML file, an import fixture with missing or wrongly
+typed event fields, or importing a directory all print `error: ...`
+and exit 2.
 
 ## Export / import (`agenttrace/export.py`, `agenttrace/importer.py`)
 
@@ -228,7 +254,12 @@ second time. Fixtures are portable: they carry no database
 dependency, and `Event.from_dict` can read them back.
 `import_run(store, fixture_path)` reads a fixture back into a store,
 re-redacting on the way in; if the fixture's run id (or an event id)
-already exists, fresh ids are minted instead of colliding.
+already exists, fresh ids are minted instead of colliding. Import
+runs the full redactor in two passes — it first learns the fixture's
+own secrets (including free-text and `db_pass`/`sessionid`-keyed
+ones), then redacts — and persists the imported run's learned set,
+so a hand-made fixture carrying an unlearned secret lands scrubbed
+in the database and stays scrubbed on re-export.
 
 ## CLI (`agenttrace/__main__.py`)
 

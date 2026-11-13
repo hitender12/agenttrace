@@ -9,6 +9,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Redaction leaks, round 2 (independent re-audit: 22 leaks out of
+  41 fresh checks).** All 12 finding groups fixed and covered by
+  `tests/test_fixes_round2.py` (20 tests):
+  - Key spellings: `sessionid`/`session_id`, `db_pass`/`dbpass`,
+    `encryption_key`, `signing_key`, `csrf`, and a bare `pass` key are
+    now sensitive (`bypass`/`compass`/`passage` are not — `pass` is
+    only sensitive as a standalone key); inline-assignment learning
+    covers `db_pass=...`.
+  - Retroactive learning: learned secrets are persisted per run as
+    SHA-256 digests + lengths in a `learned_secrets` table — never the
+    secret itself, so the database file contains no recoverable
+    secret — and `finish_run` re-redacts earlier occurrences and
+    artifact files; a fresh store re-redacts from the persisted set
+    on export, including the crash case where the run never finished.
+    `PRAGMA secure_delete=ON` zeroes freed content so a secret an
+    earlier write stored verbatim does not linger in free pages.
+  - Run names and event type/name are redacted at write time.
+  - `memory_write` key-name trap closed: when the `key` argument is
+    itself a sensitive key name, the value is learned and redacted.
+  - Inline-assignment trailing punctuation is stripped from learned
+    values (`password=hunter2.` learns `hunter2`, period preserved).
+  - Import runs the full redactor in two passes (learn the fixture's
+    own secrets first, then redact) and persists the imported run's
+    learned set, so hand-made fixtures carrying unlearned free-text
+    or `db_pass`/`sessionid`-keyed secrets land scrubbed.
+  - Generic values are not learned (stoplist: `password`, `secret`,
+    `token`, `changeme`, ...), so "enter your password here" is no
+    longer over-redacted.
+  - "Never a traceback" now holds across the CLI: a corrupt SQLite
+    store, a JSON case file without a `cases` key, a ~2000-level YAML
+    file (new 100-level depth guard in `yamlmini`), an import fixture
+    with missing or wrongly typed event fields, and importing a
+    directory all print `error: ...` and exit 2.
+  - YAML duplicate keys inside `- key: value` sequence items now
+    raise `YamlSubsetError`, as the docstring claimed.
+  - Replay `retrieve()` fallbacks are counted in
+    `fallback_live_calls` (and `live_calls`) with `meta.live: True`,
+    like model and tool fallbacks.
+  - Docs updated to match: redaction sections in README,
+    ARCHITECTURE, and `docs/architecture.md`, fallback accounting in
+    `docs/replay-modes.md`, the yamlmini docstring, and a PEP 668
+    note (`pip install -e .` needs a venv or `--break-system-packages`
+    on Debian/Ubuntu).
 - **Redaction leaks (QA audit).** Substring matching on field names
   (`db_password`, `auth_token`, `x-api-key`, `clientSecret`, ...),
   shape matching for JWTs, PEM keys, long hex strings and inline

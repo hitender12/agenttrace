@@ -92,6 +92,12 @@ fallback count means the agent has changed enough that the recording
 no longer describes its behaviour, and exact replay is no longer a
 faithful reproduction of the original run.
 
+This applies to retrieval too: when a retrieval has no recorded
+event, the engine falls back to a live knowledge-base lookup and
+counts it in `fallback_live_calls` (and `live_calls`), with the event
+labelled `meta.live: True` — a missing retrieval is never mistaken
+for a replayed one.
+
 ## Side-effect safety rules
 
 These rules apply in **all three modes**. They are the most important

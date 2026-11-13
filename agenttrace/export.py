@@ -17,6 +17,17 @@ def export_run(store: Store, run_id: str, out_path,
     run = store.get_run(run_id)
     if run is None:
         raise ValueError(f"no such run: {run_id}")
+    # Retroactive learning: prime the redactor with the run's persisted
+    # learned secrets *before* building the payload, so a secret that
+    # first appeared in free text and was only later seen under a
+    # sensitive key is scrubbed from the export too — even when a
+    # freshly reopened store exports a run it never recorded.
+    redactor = redactor or getattr(store, "redactor", None) or Redactor()
+    for digest, length in store.load_learned_secrets(run_id):
+        redactor.register_hashed_secret(digest, length)
+    # Re-redact the run's artifact files with the same set, so the
+    # exported fixture and the files on disk agree.
+    store.scrub_run_artifacts(run_id)
     events = store.get_events(run_id)
     payload = {
         "agenttrace_version": 1,
@@ -25,7 +36,6 @@ def export_run(store: Store, run_id: str, out_path,
     }
     # Reuse the store's redactor when no explicit one is given, so secrets
     # learned during recording are scrubbed from the export too.
-    redactor = redactor or getattr(store, "redactor", None) or Redactor()
     payload = redactor.redact(payload)
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)

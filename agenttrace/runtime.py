@@ -114,6 +114,14 @@ class _Recorder:
         return output
 
     def memory_write(self, key: str, value) -> None:
+        # The key name itself is a signal: memory_write("db_password",
+        # secret) stores the secret under the generic "value" field, so
+        # without this the value is never learned or redacted. When the
+        # key is sensitive, register the value first — the store then
+        # scrubs it from the recorded output like any learned secret.
+        from .redaction import is_sensitive_key
+        if is_sensitive_key(key):
+            self.store.redactor.register_value(value)
         self._memory[key] = value
         self._record(EventType.MEMORY_WRITE.value, "memory_write",
                      {"key": key}, {"value": value})

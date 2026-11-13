@@ -66,7 +66,7 @@ def load_cases(path) -> list[dict]:
         raise CaseFileError(f"{path}: {exc}")
     except json.JSONDecodeError as exc:
         raise CaseFileError(f"{path}: invalid JSON: {exc}")
-    cases = data["cases"] if isinstance(data, dict) else data
+    cases = data.get("cases") if isinstance(data, dict) else data
     if not isinstance(cases, list):
         raise CaseFileError(
             f"{path}: expected a top-level list or a 'cases' list")

@@ -338,7 +338,16 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv=None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except (ValueError, OSError, KeyError, RecursionError, TypeError) as exc:
+        # Last-resort guard for the "never a traceback" contract: any
+        # failure the individual commands did not already turn into a
+        # clean error still prints as `error: ...` with exit code 2.
+        # (argparse errors exit 2 on their own; KeyboardInterrupt and
+        # SystemExit are BaseExceptions and are not caught here.)
+        _print_error(str(exc) or exc.__class__.__name__)
+        return 2
 
 
 if __name__ == "__main__":

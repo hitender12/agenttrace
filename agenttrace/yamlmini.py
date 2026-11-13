@@ -10,10 +10,11 @@ Supports exactly the subset AgentTrace case files need:
 - comments (``# ...``) and a single leading document marker (``---``)
 
 Anything else — tabs, anchors/aliases, tags, flow maps, multi-document
-files, duplicate keys — raises :class:`YamlSubsetError` with a clear
-message instead of a traceback. This is intentionally *not* a full YAML
-parser: case files are small and hand-written, and a loud, precise
-error beats silently misreading a case.
+files, duplicate keys, nesting deeper than 100 levels — raises
+:class:`YamlSubsetError` with a clear message instead of a traceback.
+This is intentionally *not* a full YAML parser: case files are small
+and hand-written, and a loud, precise error beats silently misreading
+a case.
 """
 from __future__ import annotations
 
@@ -22,7 +23,16 @@ class YamlSubsetError(ValueError):
     """Raised when a case file uses YAML outside the supported subset."""
 
 
-def _scalar(token: str, line_no: int):
+# Maximum nesting depth (mappings/sequences/inline lists). A case file
+# ~2000 levels deep used to recurse until Python raised RecursionError;
+# the guard turns it into a plain YamlSubsetError instead.
+MAX_DEPTH = 100
+
+
+def _scalar(token: str, line_no: int, depth: int = 0):
+    if depth > MAX_DEPTH:
+        raise YamlSubsetError(
+            f"line {line_no}: nesting too deep (max {MAX_DEPTH} levels)")
     token = token.strip()
     if token in ("", "~", "null", "Null", "NULL"):
         return None
@@ -40,7 +50,7 @@ def _scalar(token: str, line_no: int):
         inner = token[1:-1].strip()
         if not inner:
             return []
-        return [_scalar(part, line_no) for part in _split_inline(inner)]
+        return [_scalar(part, line_no, depth + 1) for part in _split_inline(inner)]
     if token.startswith("{"):
         raise YamlSubsetError(
             f"line {line_no}: flow mappings ({{...}}) are not supported; "
@@ -127,8 +137,12 @@ def parse_yaml_subset(text: str):
         raise YamlSubsetError("empty case file")
     pos = 0
 
-    def parse_block(indent: int):
+    def parse_block(indent: int, depth: int = 0):
         nonlocal pos
+        if depth > MAX_DEPTH:
+            line_no = raw_lines[pos][0] if pos < len(raw_lines) else 0
+            raise YamlSubsetError(
+                f"line {line_no}: nesting too deep (max {MAX_DEPTH} levels)")
         if pos >= len(raw_lines):
             return None
         line_no, line = raw_lines[pos]
@@ -137,10 +151,10 @@ def parse_yaml_subset(text: str):
                 f"line {line_no}: unexpected indentation "
                 f"(expected {indent} spaces)")
         if line.strip().startswith("- ") or line.strip() == "-":
-            return parse_sequence(indent)
-        return parse_mapping(indent)
+            return parse_sequence(indent, depth)
+        return parse_mapping(indent, depth)
 
-    def parse_sequence(indent: int):
+    def parse_sequence(indent: int, depth: int = 0):
         nonlocal pos
         items = []
         while pos < len(raw_lines):
@@ -154,7 +168,8 @@ def parse_yaml_subset(text: str):
             if not after_dash:
                 pos += 1
                 if pos < len(raw_lines) and _indent_of(raw_lines[pos][1]) > indent:
-                    items.append(parse_block(_indent_of(raw_lines[pos][1])))
+                    items.append(parse_block(_indent_of(raw_lines[pos][1]),
+                                             depth + 1))
                 else:
                     items.append(None)
                 continue
@@ -169,8 +184,11 @@ def parse_yaml_subset(text: str):
                 pos += 1
                 if rest.strip() == "":
                     if pos < len(raw_lines) and _indent_of(raw_lines[pos][1]) > indent:
-                        mapping[key] = parse_block(_indent_of(raw_lines[pos][1]))
+                        mapping[key] = parse_block(_indent_of(raw_lines[pos][1]),
+                                                   depth + 1)
                 # Further keys of the same mapping sit at item_indent.
+                # Duplicate keys are an error here, exactly as in plain
+                # mappings — last-wins would silently drop a case.
                 while pos < len(raw_lines):
                     n2, l2 = raw_lines[pos]
                     if _indent_of(l2) != item_indent or l2.strip().startswith("-"):
@@ -179,18 +197,22 @@ def parse_yaml_subset(text: str):
                     k2 = k2.strip()
                     if not k2 or ":" not in l2:
                         break
+                    if k2 in mapping:
+                        raise YamlSubsetError(
+                            f"line {n2}: duplicate key {k2!r}")
                     mapping[k2] = _scalar(v2, n2) if v2.strip() else None
                     pos += 1
                     if v2.strip() == "" and pos < len(raw_lines) \
                             and _indent_of(raw_lines[pos][1]) > item_indent:
-                        mapping[k2] = parse_block(_indent_of(raw_lines[pos][1]))
+                        mapping[k2] = parse_block(_indent_of(raw_lines[pos][1]),
+                                                  depth + 1)
                 items.append(mapping)
                 continue
             items.append(_scalar(after_dash, line_no))
             pos += 1
         return items
 
-    def parse_mapping(indent: int):
+    def parse_mapping(indent: int, depth: int = 0):
         nonlocal pos
         mapping: dict = {}
         while pos < len(raw_lines):
@@ -212,7 +234,8 @@ def parse_yaml_subset(text: str):
             if rest.strip():
                 mapping[key] = _scalar(rest, line_no)
             elif pos < len(raw_lines) and _indent_of(raw_lines[pos][1]) > indent:
-                mapping[key] = parse_block(_indent_of(raw_lines[pos][1]))
+                mapping[key] = parse_block(_indent_of(raw_lines[pos][1]),
+                                           depth + 1)
             else:
                 mapping[key] = None
         return mapping

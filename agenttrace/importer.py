@@ -28,6 +28,10 @@ def import_run(store: Store, fixture_path,
         data = json.loads(Path(fixture_path).read_text(encoding="utf-8"))
     except FileNotFoundError:
         raise ValueError(f"no such fixture file: {fixture_path}")
+    except OSError as exc:
+        # E.g. importing a directory (IsADirectoryError): a plain
+        # message, never a traceback.
+        raise ValueError(f"cannot read fixture {fixture_path}: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise ValueError(f"fixture {fixture_path} is not valid JSON: {exc}")
     if not isinstance(data, dict) or "run" not in data or "events" not in data:
@@ -38,10 +42,30 @@ def import_run(store: Store, fixture_path,
         raise ValueError(
             f"fixture {fixture_path} has unsupported agenttrace_version: "
             f"{data.get('agenttrace_version')!r} (expected 1)")
+    if not isinstance(data["run"], dict):
+        raise ValueError(
+            f"fixture {fixture_path}: 'run' must be a mapping")
+    if not isinstance(data["events"], list):
+        raise ValueError(
+            f"fixture {fixture_path}: 'events' must be a list")
 
     redactor = redactor or getattr(store, "redactor", None) or Redactor()
+    # Two passes. The first pass *learns* every secret the fixture
+    # carries — values under sensitive keys (db_pass, sessionid, ...),
+    # inline ``key=value`` assignments in free text — including
+    # secrets that never appear under a sensitive key until later in
+    # the fixture. The second pass then scrubs free-text occurrences
+    # with the full learned set. A single pass would leave exactly
+    # the free-text secrets a hand-made fixture smuggles in.
+    redactor.learn_from(data)
     run = redactor.redact(dict(data["run"]))
     events = [redactor.redact(dict(e)) for e in data["events"]]
+
+    # Validate every event before touching the database: a fixture with
+    # a missing required field or a wrong field type is a plain
+    # ValueError naming the event and field — never a TypeError
+    # traceback from Event.from_dict.
+    _validate_events(fixture_path, events)
 
     run_id = run.get("id") or ("run_" + secrets.token_hex(8))
     if store.get_run(run_id) is not None:
@@ -82,4 +106,48 @@ def import_run(store: Store, fixture_path,
              json.dumps(event.meta)),
         )
     store._conn.commit()
+    # Persist what the fixture taught the redactor, so a later export
+    # of this imported run re-redacts from the same learned set.
+    store._persist_learned_secrets(run_id, redactor=redactor)
     return run_id
+
+
+# Event fields without defaults in agenttrace.events.Event — a fixture
+# missing one of these used to raise a bare TypeError from
+# Event.from_dict. Optional fields are checked for type when present.
+_REQUIRED_EVENT_FIELDS = (
+    "id", "run_id", "seq", "trace_id", "span_id", "type", "name",
+    "started_at",
+)
+
+
+def _validate_events(fixture_path, events: list) -> None:
+    for index, raw in enumerate(events):
+        where = f"fixture {fixture_path}: event {index}"
+        if not isinstance(raw, dict):
+            raise ValueError(f"{where} is not a mapping")
+        for field in _REQUIRED_EVENT_FIELDS:
+            if field not in raw or raw[field] is None:
+                raise ValueError(
+                    f"{where} is missing required field {field!r}")
+        if not isinstance(raw["seq"], int) or isinstance(raw["seq"], bool):
+            raise ValueError(
+                f"{where}: 'seq' must be an integer, got "
+                f"{raw['seq']!r}")
+        for field in ("id", "run_id", "trace_id", "span_id", "type",
+                      "name", "started_at"):
+            if not isinstance(raw[field], str):
+                raise ValueError(
+                    f"{where}: {field!r} must be a string, got "
+                    f"{raw[field]!r}")
+        for field in ("input", "output", "meta"):
+            if field in raw and raw[field] is not None \
+                    and not isinstance(raw[field], dict):
+                raise ValueError(
+                    f"{where}: {field!r} must be a mapping, got "
+                    f"{raw[field]!r}")
+        duration = raw.get("duration_ms")
+        if duration is not None and not isinstance(duration, (int, float)):
+            raise ValueError(
+                f"{where}: 'duration_ms' must be a number, got "
+                f"{duration!r}")

@@ -40,6 +40,11 @@ class ReplayRuntime(_Recorder):
         self.hybrid_tools = set(hybrid_tools or [])
         self.allow_side_effects = allow_side_effects
         self.model_stub = model or ScriptedModel()
+        # Prime the redactor with the source run's persisted learned
+        # secrets, so a replay from a freshly reopened store does not
+        # re-record a secret the source run only learned late.
+        for digest, length in store.load_learned_secrets(source_run_id):
+            store.redactor.register_hashed_secret(digest, length)
         self.source_events = store.get_events(source_run_id)
         if not self.source_events:
             raise ValueError(f"no such run or empty run: {source_run_id}")
@@ -187,11 +192,22 @@ class ReplayRuntime(_Recorder):
             self.report["live_calls"] += 1
             return docs
         recorded = self._next_recorded(EventType.RETRIEVAL.value, "retrieve")
-        docs = (recorded.output.get("documents", []) if recorded
-                else lookup_kb(query))
+        if recorded is None:
+            # No recorded retrieval for this query: fall back to a live
+            # KB lookup and say so — counted in fallback_live_calls
+            # with meta.live, exactly like the model() and tool()
+            # fallbacks. A fallback is a live call, not a replay.
+            docs = lookup_kb(query)
+            self._record(EventType.RETRIEVAL.value, "retrieve",
+                         {"query": query}, {"documents": docs},
+                         meta={"live": True})
+            self.report["fallback_live_calls"] += 1
+            self.report["live_calls"] += 1
+            return docs
+        docs = recorded.output.get("documents", [])
         self._record(EventType.RETRIEVAL.value, "retrieve",
                      {"query": query}, {"documents": docs},
                      meta={"replayed": True,
-                           "replayed_from": recorded.id if recorded else None})
+                           "replayed_from": recorded.id})
         self.report["replayed_calls"] += 1
         return docs
